@@ -1,13 +1,37 @@
-# Sample Hardhat Project
+# Advertisements Project
 
-This project demonstrates a basic Hardhat use case. It comes with a sample contract, a test for that contract, and a script that deploys that contract.
+## Install Dependencies
 
-Try running some of the following tasks:
+```sh
+yarn
+```
 
-```shell
-npx hardhat help
-npx hardhat test
-REPORT_GAS=true npx hardhat test
-npx hardhat node
-npx hardhat run scripts/deploy.ts
+## Command
+
+Compile contracts
+
+```sh
+yarn compile
+```
+
+Test contracts
+```sh
+yarn test # Run all test case
+yarn test test/Advertisements.spec.ts # Run single case
+```
+
+Clean caches
+```sh
+yarn clean
+```
+
+## Contracts
+
+```sh
+contracts
+├── AdMatch.sol
+├── Advertisements.sol
+├── Lock.sol
+└── test
+    └── TestERC20.sol
 ```

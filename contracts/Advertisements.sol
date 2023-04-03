@@ -9,21 +9,20 @@ import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 contract Advertisements is Ownable, Initializable {
     using SafeMath for uint256;
 
-    enum AdType {DeFi, GameFi, NFT}
-    
     struct Ad {
-        AdType adType;
+        uint category;
         address publisher;
         uint256 inventory;
         uint256 reward;
         string ipfsHash;
     }
-    
+
     address public signer;
 
     Ad[] private _ads;
     mapping(uint256 => uint256) private _adCompleted;
     mapping(uint256 => mapping(address => bool)) private _adUsers;
+    mapping(uint => bool) public _categories;
 
     event CreateAd(uint256 indexed adIndex, address user);
     event CompleteAd(uint256 indexed adIndex, address user, uint256 rewardAmount);
@@ -39,16 +38,23 @@ contract Advertisements is Ownable, Initializable {
         require(signer != newOne, "There is no change");
         signer = newOne;
     }
-    
-    function createAd(string memory ipfsHash, AdType adType, uint256 inventory, uint256 reward) external payable {
+
+    function addCategory(uint category) external {
+        require(_categories[category] == true, "category already exists.");
+        _categories[category] = true;
+    }
+
+
+    function createAd(string memory ipfsHash, uint category, uint256 inventory, uint256 reward) external payable {
         uint256 requiredAmount = inventory.mul(reward);
         require(msg.value == requiredAmount, "Insufficient balance to create ad.");
+        require(_categories[category] == true, "Category does not exist.");
 
-        _ads.push(Ad(adType, msg.sender, inventory, reward, ipfsHash));
+        _ads.push(Ad(category, msg.sender, inventory, reward, ipfsHash));
 
         emit CreateAd(_ads.length.sub(1), msg.sender);
     }
-    
+
     function completeAd(uint256 adIndex, bytes memory signature) external {
         require(adIndex < _ads.length, "Ad index over flow");
         require(!_adUsers[adIndex][msg.sender], "User has already completed this ad.");
@@ -62,9 +68,9 @@ contract Advertisements is Ownable, Initializable {
         emit CompleteAd(adIndex, msg.sender, _ads[adIndex].reward);
     }
 
-    function matchAd(AdType _adType, address user) external view returns (uint256) {    
+    function matchAd(uint _category, address user) external view returns (uint256) {
         for (uint256 i = 0; i < _ads.length; i++) {
-            if (_ads[i].adType == _adType && !_adUsers[i][user]) {
+            if (_ads[i].category == _category && !_adUsers[i][user]) {
                 return i;
             }
         }
@@ -75,9 +81,9 @@ contract Advertisements is Ownable, Initializable {
         return _ads.length;
     }
 
-    function adInfo(uint256 adIndex) external view returns(AdType, address, uint256, uint256, string memory) {
+    function adInfo(uint256 adIndex) external view returns(uint, address, uint256, uint256, string memory) {
         Ad memory ad = _ads[adIndex];
-        return (ad.adType, ad.publisher, ad.inventory, ad.reward, ad.ipfsHash);
+        return (ad.category, ad.publisher, ad.inventory, ad.reward, ad.ipfsHash);
     }
 
     function adCompletedAmount(uint256 adIndex) external view returns(uint256) {

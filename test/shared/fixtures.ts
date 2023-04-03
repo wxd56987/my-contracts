@@ -1,6 +1,6 @@
 import { TestERC20 } from './../../typechain/TestERC20';
 import { Advertisements } from './../../typechain/Advertisements';
-import { Wallet } from 'ethers'
+import { Wallet, BigNumber } from 'ethers'
 import { ethers, network } from 'hardhat'
 import { Fixture } from 'ethereum-waffle'
 
@@ -17,7 +17,8 @@ interface AdFixture {
 export const adFixture: Fixture<AdFixture> = async function ([wallet]: Wallet[]): Promise<AdFixture> {
     let adFactory = await ethers.getContractFactory('Advertisements')
     let ad = (await adFactory.deploy()) as Advertisements
-    await ad.initialize(wallet.address)
+    let categories = [BigNumber.from(0), BigNumber.from(1), BigNumber.from(2)]
+    await ad.initialize(wallet.address, categories)
     return { ad }
 }
 

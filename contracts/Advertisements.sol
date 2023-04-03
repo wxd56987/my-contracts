@@ -27,9 +27,12 @@ contract Advertisements is Ownable, Initializable {
     event CreateAd(uint256 indexed adIndex, address user);
     event CompleteAd(uint256 indexed adIndex, address user, uint256 rewardAmount);
 
-    function initialize(address signer_) external initializer {
+    function initialize(address signer_, uint256[] calldata categories) external initializer {
         require(signer_ != address(0), "Signer can not be zero address.");
         signer = signer_;
+        for (uint256 i = 0; i < categories.length; i++) {
+            _setCategory(categories[i], true);
+        }
     }
 
     receive() external payable {}
@@ -39,16 +42,12 @@ contract Advertisements is Ownable, Initializable {
         signer = newOne;
     }
 
-    function addCategory(uint category) external {
-        require(!_categories[category], "category already exists.");
-        _categories[category] = true;
+    function batchSetCategory(uint256[] calldata categories, bool[] calldata states) external onlyOwner {
+        require(categories.length == states.length, "Diff array length");
+        for (uint256 i = 0; i < categories.length; i++) {
+            _setCategory(categories[i], states[i]);
+        }
     }
-
-    function disabledCategory(uint category) external {
-        require(_categories[category] == true, "Category does not exist.");
-        _categories[category] = false;
-    }
-
 
     function createAd(string memory ipfsHash, uint category, uint256 inventory, uint256 reward) external payable {
         uint256 requiredAmount = inventory.mul(reward);
@@ -99,5 +98,9 @@ contract Advertisements is Ownable, Initializable {
         bytes32 message = keccak256(abi.encodePacked(adIndex, user, address(this)));
         bytes32 hash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", message));
         return SignatureChecker.isValidSignatureNow(signer, hash, signature);
+    }
+
+    function _setCategory(uint256 category, bool state) internal {
+        _categories[category] = state;
     }
 }

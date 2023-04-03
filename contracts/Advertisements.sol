@@ -40,8 +40,13 @@ contract Advertisements is Ownable, Initializable {
     }
 
     function addCategory(uint category) external {
-        require(_categories[category] == true, "category already exists.");
+        require(!_categories[category], "category already exists.");
         _categories[category] = true;
+    }
+
+    function disabledCategory(uint category) external {
+        require(_categories[category] == true, "Category does not exist.");
+        _categories[category] = false;
     }
 
 

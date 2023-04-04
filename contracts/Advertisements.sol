@@ -5,76 +5,170 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "./libraries/TransferHelper.sol";
 
-contract Advertisements is Ownable, Initializable {
+/**
+ * @title Advertisements
+ * @author Kmy (github.com/wxd56987)
+ * @custom:coauthor Ted (github.cm/tdergouzi)
+*/
+contract Advertisements is Ownable, Initializable, ReentrancyGuard {
     using SafeMath for uint256;
 
     struct Ad {
-        uint category;
         address publisher;
+        address rewardToken;
+        uint128 category;
         uint256 inventory;
-        uint256 reward;
+        uint256 rewardAmount;
         string ipfsHash;
     }
 
     address public signer;
+    mapping(uint128 => bool) public categories;
+    mapping(address => bool) public tokenList;
+    mapping(uint256 => uint256) public adCompleted;
+    mapping(uint256 => mapping(address => bool)) public adUsers;
 
     Ad[] private _ads;
-    mapping(uint256 => uint256) private _adCompleted;
-    mapping(uint256 => mapping(address => bool)) private _adUsers;
-    mapping(uint => bool) public _categories;
-
+    
     event CreateAd(uint256 indexed adIndex, address user);
-    event CompleteAd(uint256 indexed adIndex, address user, uint256 rewardAmount);
+    event CancelAd(uint256 indexed adIndex, address user, uint256 refundAmount);
+    event CompleteAd(uint256 indexed adIndex, address user, address rewardToken, uint256 rewardAmount);
 
-    function initialize(address signer_, uint256[] calldata categories) external initializer {
+    /**
+     * @dev Initailize the contract.
+     * @param signer_ address The validater address.
+    */
+    function initialize(address signer_) external initializer {
         require(signer_ != address(0), "Signer can not be zero address.");
         signer = signer_;
-        for (uint256 i = 0; i < categories.length; i++) {
-            _setCategory(categories[i], true);
-        }
     }
 
     receive() external payable {}
 
+    /**
+     * @notice Reset the signer address.
+     * @param newOne address New signer address.
+    */
     function setSigner(address newOne) external onlyOwner {
         require(signer != newOne, "There is no change");
+        require(newOne != address(0), "Signer can not be zero address.");
+
         signer = newOne;
     }
 
-    function batchSetCategory(uint256[] calldata categories, bool[] calldata states) external onlyOwner {
-        require(categories.length == states.length, "Diff array length");
-        for (uint256 i = 0; i < categories.length; i++) {
-            _setCategory(categories[i], states[i]);
+    /**
+     * @notice Batch set the advertisement types.
+     * @param categories_ uint128 Array of advertising types.
+     * @param states boolean Array the type state.
+    */
+    function batchSetCategory(uint128[] calldata categories_, bool[] calldata states) external onlyOwner {
+        require(categories_.length == states.length, "Diff array length");
+        for (uint256 i = 0; i < categories_.length; i++) {
+            _setCategory(categories_[i], states[i]);
         }
     }
 
-    function createAd(string memory ipfsHash, uint category, uint256 inventory, uint256 reward) external payable {
-        uint256 requiredAmount = inventory.mul(reward);
-        require(msg.value == requiredAmount, "Insufficient balance to create ad.");
-        require(_categories[category] == true, "Category does not exist.");
+    /**
+     * @notice Batch set the advertisement types.
+     * @param tokens uint128 Array of reward token address.
+     * @param states boolean Array the token state.
+    */
+    function batchSetToken(address[] calldata tokens, bool[] calldata states) external onlyOwner {
+        require(tokens.length == states.length, "Diff array length");
+        for (uint256 i = 0; i < tokens.length; i++) {
+            _setToken(tokens[i], states[i]);
+        }
+    }
 
-        _ads.push(Ad(category, msg.sender, inventory, reward, ipfsHash));
+    function createAd(
+        address rewardToken,
+        uint128 category,
+        uint256 inventory,
+        uint256 rewardAmount,
+        string memory ipfsHash
+    ) external payable {
+        uint256 requiredAmount = inventory.mul(rewardAmount);
+        require(categories[category] == true, "Category does not exist.");
+        
+        if (rewardToken == address(0)) {
+            // Default reward token is gas token
+            require(msg.value == requiredAmount, "Insufficient balance to create ad.");
+        } else if (tokenList[rewardToken]) {
+            // If the reward token is ERC20 token, check the token is in whitelist
+            TransferHelper.safeTransferFrom(rewardToken, msg.sender, address(this), requiredAmount);
+        } else {
+            revert("RewardToken is not in whitelist");
+        }
+
+        _ads.push(
+            Ad(
+                msg.sender,
+                rewardToken,
+                category,
+                inventory,
+                rewardAmount,
+                ipfsHash
+            ));
 
         emit CreateAd(_ads.length.sub(1), msg.sender);
     }
 
-    function completeAd(uint256 adIndex, bytes memory signature) external {
+    function cancelAd(uint256 adIndex) external nonReentrant {
         require(adIndex < _ads.length, "Ad index over flow");
-        require(!_adUsers[adIndex][msg.sender], "User has already completed this ad.");
+        Ad storage ad = _ads[adIndex];
+        require(msg.sender == ad.publisher, "Caller is not ad publisher");
+
+        // Update ad inventory to completed amount
+        uint256 inventory = ad.inventory;
+        ad.inventory = adCompleted[adIndex];
+
+        // Refund the reward token to the publisher
+        uint256 refundAmount;
+        if (inventory > adCompleted[adIndex]) {
+            refundAmount = inventory.sub(adCompleted[adIndex]).mul(ad.rewardAmount);
+            if (ad.rewardToken == address(0)) {
+                // If the balance of contract of rewardToken is less than calculated refund amount
+                // refund amount will update to the balance of contract
+                refundAmount = refundAmount > address(this).balance ? address(this).balance : refundAmount;
+                TransferHelper.safeTransferETH(msg.sender, refundAmount);
+            } else {
+                // Identical to the previous one
+                uint256 balanceOfContract = IERC20(ad.rewardToken).balanceOf(address(this));
+                refundAmount = refundAmount > balanceOfContract ? balanceOfContract : refundAmount;
+                TransferHelper.safeTransfer(ad.rewardToken, msg.sender, refundAmount);
+            }
+        }
+
+        emit CancelAd(adIndex, msg.sender, refundAmount);
+    }
+
+
+    function completeAd(uint256 adIndex, bytes memory signature) external nonReentrant {
+        require(adIndex < _ads.length, "Ad index over flow");
+        require(!adUsers[adIndex][msg.sender], "User has already completed this ad.");
         require(verifyComplete(adIndex, msg.sender, signature), "Invalid signature.");
-        require(_adCompleted[adIndex] < _ads[adIndex].inventory, "Over ad inventory");
+        Ad memory ad = _ads[adIndex];
+        require(adCompleted[adIndex] < ad.inventory, "Over ad inventory");
 
-        _adUsers[adIndex][msg.sender] = true;
-        _adCompleted[adIndex] = _adCompleted[adIndex].add(1);
-        payable(msg.sender).transfer(_ads[adIndex].reward);
+        adUsers[adIndex][msg.sender] = true;
+        adCompleted[adIndex] = adCompleted[adIndex].add(1);
 
-        emit CompleteAd(adIndex, msg.sender, _ads[adIndex].reward);
+        if (ad.rewardToken == address(0)) {
+            TransferHelper.safeTransferETH(msg.sender, ad.rewardAmount);
+        } else {
+            TransferHelper.safeTransfer(ad.rewardToken, msg.sender, ad.rewardAmount);
+        }
+
+        emit CompleteAd(adIndex, msg.sender, ad.rewardToken, ad.rewardAmount);
     }
 
     function matchAd(uint _category, address user) external view returns (uint256) {
         for (uint256 i = 0; i < _ads.length; i++) {
-            if (_ads[i].category == _category && !_adUsers[i][user]) {
+            if (_ads[i].category == _category && !adUsers[i][user]) {
                 return i;
             }
         }
@@ -87,11 +181,7 @@ contract Advertisements is Ownable, Initializable {
 
     function adInfo(uint256 adIndex) external view returns(uint, address, uint256, uint256, string memory) {
         Ad memory ad = _ads[adIndex];
-        return (ad.category, ad.publisher, ad.inventory, ad.reward, ad.ipfsHash);
-    }
-
-    function adCompletedAmount(uint256 adIndex) external view returns(uint256) {
-        return _adCompleted[adIndex];
+        return (ad.category, ad.publisher, ad.inventory, ad.rewardAmount, ad.ipfsHash);
     }
 
     function verifyComplete(uint256 adIndex, address user, bytes memory signature) public view returns(bool) {
@@ -100,7 +190,12 @@ contract Advertisements is Ownable, Initializable {
         return SignatureChecker.isValidSignatureNow(signer, hash, signature);
     }
 
-    function _setCategory(uint256 category, bool state) internal {
-        _categories[category] = state;
+    function _setCategory(uint128 category, bool state) internal {
+        categories[category] = state;
+    }
+
+    function _setToken(address token, bool state) internal {
+        if (token == address(0)) return;
+        tokenList[token] = state;
     }
 }

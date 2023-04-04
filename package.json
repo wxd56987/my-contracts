@@ -1,15 +1,21 @@
 {
-  "name": "hardhat-project",
-  "author": "kmy",
+  "name": "advertisement-project",
+  "author": "Kmy",
+  "keywords": [
+    "advertisements",
+    "solidity",
+    "hardhat"
+  ],
   "license": "MIT",
   "scripts": {
+    "flatten": "waffle flatten",
     "compile": "npx hardhat compile",
     "test": "npx hardhat test",
     "clean": "npx hardhat clean"
   },
-  "devDependencies": {
+  "dependencies": {
     "@nomiclabs/hardhat-ethers": "^2.2.2",
-    "@nomiclabs/hardhat-waffle": "^2.0.5",
+    "@nomiclabs/hardhat-etherscan": "^3.1.7",
     "@openzeppelin/contracts": "4.2.0",
     "@openzeppelin/hardhat-upgrades": "^1.22.1",
     "@typechain/ethers-v5": "6.0.5",
@@ -23,6 +29,7 @@
     "ts-generator": "^0.1.1",
     "ts-node": "^10.9.1",
     "typechain": "4.0.3",
-    "typescript": "^5.0.3"
+    "typescript": "^5.0.3",
+    "dotenv": "^16.0.3"
   }
 }

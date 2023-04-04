@@ -25,13 +25,19 @@ Clean caches
 yarn clean
 ```
 
+Flatten
+```sh
+yarn flatten
+```
+
 ## Contracts
 
 ```sh
 contracts
 ├── AdMatch.sol
 ├── Advertisements.sol
-├── Lock.sol
+├── libraries
+│   └── TransferHelper.sol
 └── test
     └── TestERC20.sol
 ```

@@ -84,6 +84,17 @@ contract Advertisements is Ownable, Initializable, ReentrancyGuard {
         }
     }
 
+    /**
+     * @notice Publish advertisement and set reward config.
+     * The reward token will be transfer into this contract when create advertisement.
+     * The default reward token is gas token which address is zero address.
+     * If the reward token is ERC20 token, the caller must set approve to this contract.
+     * @param rewardToken address Reward token contract address.
+     * @param category uint128 The type of advertisement.
+     * @param inventory uint256 The max number of users who completed advertisement want to claim reward.
+     * @param rewardAmount uint256 The amount of reward token each user can claim.
+     * @param ipfsHash string The hash of adevertise meta data on IPFS.
+    */
     function createAd(
         address rewardToken,
         uint128 category,
@@ -117,6 +128,12 @@ contract Advertisements is Ownable, Initializable, ReentrancyGuard {
         emit CreateAd(_ads.length.sub(1), msg.sender);
     }
 
+    /**
+     * @notice Cancel advertisement and refund the reward token.
+     * If the inventory of advertisement is greater than completed amount,
+     * publisher will get the remain back.
+     * @param adIndex uint256 The index in _ads array.
+    */
     function cancelAd(uint256 adIndex) external nonReentrant {
         require(adIndex < _ads.length, "Ad index over flow");
         Ad storage ad = _ads[adIndex];
@@ -146,7 +163,11 @@ contract Advertisements is Ownable, Initializable, ReentrancyGuard {
         emit CancelAd(adIndex, msg.sender, refundAmount);
     }
 
-
+    /**
+     * @notice User claim the reward when complated the advertisement task.
+     * @param adIndex uint256 The index in _ads array.
+     * @param signature bytes Signed message by signer.
+    */
     function completeAd(uint256 adIndex, bytes memory signature) external nonReentrant {
         require(adIndex < _ads.length, "Ad index over flow");
         require(!adUsers[adIndex][msg.sender], "User has already completed this ad.");
@@ -166,24 +187,51 @@ contract Advertisements is Ownable, Initializable, ReentrancyGuard {
         emit CompleteAd(adIndex, msg.sender, ad.rewardToken, ad.rewardAmount);
     }
 
-    function matchAd(uint _category, address user) external view returns (uint256) {
+    /**
+     * @notice Get the completed ad index of specific category.
+     * @param category_ uint128 The type of advertisement.
+     * @param user address Account address.
+     * @return A uint256 adIndex.
+    */
+    function matchAd(uint128 category_, address user) external view returns (uint256) {
         for (uint256 i = 0; i < _ads.length; i++) {
-            if (_ads[i].category == _category && !adUsers[i][user]) {
+            if (_ads[i].category == category_ && !adUsers[i][user]) {
                 return i;
             }
         }
         revert("No ads available for this user.");
     }
 
+    /**
+     * @notice Get the length of the ad array.
+     * @return A uint256.
+    */
     function adLength() external view returns(uint256) {
         return _ads.length;
     }
 
-    function adInfo(uint256 adIndex) external view returns(uint, address, uint256, uint256, string memory) {
+    /**
+     * @notice Get ad info.
+     * @param adIndex uint256 The index in _ads array.
+     * @return A uint256 The category of ad.
+     * @return B address The publisher of ad.
+     * @return C uint256 The inventory of ad.
+     * @return D uint256 The rewardAmount of ad.
+     * @return E string The ipfs of ad.
+    */
+    function adInfo(uint256 adIndex) external view returns(uint256, address, uint256, uint256, string memory) {
         Ad memory ad = _ads[adIndex];
         return (ad.category, ad.publisher, ad.inventory, ad.rewardAmount, ad.ipfsHash);
     }
 
+    /**
+     * @notice Verify the signature is valid.
+     * @dev The message data of signature contains adIndex, user and this contract address.
+     * @param adIndex uint256 The index in _ads array.
+     * @param user address User who completed the task want to claim.
+     * @param signature bytes Signed message by signer.
+     * @return A boolean.
+    */
     function verifyComplete(uint256 adIndex, address user, bytes memory signature) public view returns(bool) {
         bytes32 message = keccak256(abi.encodePacked(adIndex, user, address(this)));
         bytes32 hash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", message));

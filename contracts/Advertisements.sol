@@ -38,6 +38,9 @@ contract Advertisements is Ownable, Initializable, ReentrancyGuard {
     event CancelAd(uint256 indexed adIndex, address user, uint256 refundAmount);
     event CompleteAd(uint256 indexed adIndex, address user, address rewardToken, uint256 rewardAmount);
 
+    // solhint-disable-next-line
+    receive() external payable {}
+
     /**
      * @dev Initailize the contract.
      * @param signer_ address The validater address.
@@ -46,8 +49,6 @@ contract Advertisements is Ownable, Initializable, ReentrancyGuard {
         require(signer_ != address(0), "Signer can not be zero address.");
         signer = signer_;
     }
-
-    receive() external payable {}
 
     /**
      * @notice Reset the signer address.
@@ -101,10 +102,11 @@ contract Advertisements is Ownable, Initializable, ReentrancyGuard {
         uint256 inventory,
         uint256 rewardAmount,
         string memory ipfsHash
-    ) external payable {
+    ) external payable nonReentrant {
         uint256 requiredAmount = inventory.mul(rewardAmount);
-        require(categories[category] == true, "Category does not exist.");
+        require(categories[category], "Category does not exist.");
         
+        // slither-disable-start reentrancy-benign
         if (rewardToken == address(0)) {
             // Default reward token is gas token
             require(msg.value == requiredAmount, "Insufficient balance to create ad.");
@@ -114,6 +116,7 @@ contract Advertisements is Ownable, Initializable, ReentrancyGuard {
         } else {
             revert("RewardToken is not in whitelist");
         }
+        // slither-disable-end reentrancy-benign
 
         _ads.push(
             Ad(
@@ -144,6 +147,7 @@ contract Advertisements is Ownable, Initializable, ReentrancyGuard {
         ad.inventory = adCompleted[adIndex];
 
         // Refund the reward token to the publisher
+        // slither-disable-next-line uninitialized-local
         uint256 refundAmount;
         if (inventory > adCompleted[adIndex]) {
             refundAmount = inventory.sub(adCompleted[adIndex]).mul(ad.rewardAmount);

@@ -1,0 +1,5 @@
+{
+    "solc_remaps": "@=node_modules/@",
+    "filter_paths": "node_modules/,contracts/libraries/",
+    "detectors_to_exclude": "solc-version"
+}

@@ -30,6 +30,14 @@ Flatten
 yarn flatten
 ```
 
+Slither contract
+
+https://github.com/crytic/slither
+
+```
+slither contracts/Advertisements.sol --config-file slither.config.json
+```
+
 ## Contracts
 
 ```sh
